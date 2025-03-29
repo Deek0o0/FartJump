@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Fart Jump</title>
+    <style>
+        /* Add new color scheme */
+        :root {
+            --primary: #8B4513;  /* Brown */
+            --secondary: #556B2F; /* Dark Olive Green */
+            --accent: #DAA520;   /* Golden Rod */
+            --background: #1a1f2c;
+            --text: #ffffff;
+            --glass: rgba(139, 69, 19, 0.2);
+            --glass-border: rgba(139, 69, 19, 0.3);
+        }
+
+        body {
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: radial-gradient(circle at top right, #2d364f, var(--background));
+            font-family: 'Montserrat', 'Arial Rounded MT Bold', sans-serif;
+            overflow: hidden;
+        }
+
+        #gameContainer {
+            position: relative;
+            margin: 20px auto;
+            border-radius: 24px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+            overflow: hidden;
+        }
+
+        #gameCanvas {
+            border-radius: 24px;
+            transition: filter 0.3s ease;
+        }
+
+        .menu-active #gameCanvas {
+            filter: blur(8px);
+        }
+
+        /* Common Menu Styles */
+        .menu {
+            width: 500px;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(26, 31, 44, 0.95);
+            border: 2px solid var(--accent);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 0 30px rgba(0,0,0,0.5),
+                        0 0 60px rgba(218, 165, 32, 0.2);
+            backdrop-filter: blur(10px);
+        }
+
+        .menu h2 {
+            color: var(--accent);
+            font-size: 64px;
+            margin: 0 0 20px 0;
+            text-shadow: 0 0 10px rgba(218, 165, 32, 0.5);
+            font-family: 'Montserrat', sans-serif;
+            letter-spacing: 2px;
+        }
+
+        .menu-subtitle {
+            color: var(--text);
+            font-size: 28px;
+            margin-bottom: 30px;
+            font-weight: 300;
+            opacity: 0.9;
+        }
+
+        .menu-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            width: 80%;
+            margin: 0 auto;
+        }
+
+        button {
+            padding: 15px 30px;
+            font-size: 22px;
+            font-weight: bold;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .primary-btn {
+            background: var(--accent);
+            color: var(--background);
+            box-shadow: 0 4px 15px rgba(218, 165, 32, 0.3);
+        }
+
+        .secondary-btn {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text);
+            border: 2px solid var(--accent);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(218, 165, 32, 0.4);
+        }
+
+        button:active {
+            transform: translateY(1px);
+        }
+
+        #playerName {
+            width: 80%;
+            padding: 15px 20px;
+            font-size: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid var(--accent);
+            border-radius: 10px;
+            color: var(--text);
+            margin-bottom: 30px;
+            transition: all 0.3s ease;
+        }
+
+        #playerName:focus {
+            outline: none;
+            background: rgba(255, 255, 255, 0.15);
+            box-shadow: 0 0 20px rgba(218, 165, 32, 0.3);
+        }
+
+        #powerupIndicator {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background: rgba(26, 31, 44, 0.9);
+            border: 2px solid var(--accent);
+            border-radius: 10px;
+            color: var(--text);
+            font-size: 18px;
+            font-weight: bold;
+            display: none;
+            backdrop-filter: blur(5px);
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="800" height="900"></canvas>
+        <div id="powerupIndicator"></div>
+        
+        <div id="mainMenu" class="menu">
+            <h2>FART JUMP</h2>
+            <p class="menu-subtitle">Ready to blast off?</p>
+            <input type="text" id="playerName" placeholder="Enter your Telegram username here!" maxlength="15">
+            <div class="menu-buttons">
+                <button onclick="startGame()" class="primary-btn">LET IT RIP!</button>
+                <button onclick="showInstructions()" class="secondary-btn">HOW TO TOOT</button>
+                <button onclick="showLeaderboard()" class="secondary-btn">HALL OF FAME</button>
+            </div>
+        </div>
+
+        <div id="instructions" class="menu">
+            <h2>How to Play</h2>
+            <p>Use LEFT and RIGHT arrows to move</p>
+            <p>Jump on platforms to go higher</p>
+            <p>Don't fall down or it's game over!</p>
+            <button onclick="hideInstructions()" class="primary-btn">GOT IT!</button>
+        </div>
+
+        <div id="leaderboard" class="menu">
+            <h2>Hall of Fame</h2>
+            <div id="leaderboardEntries"></div>
+            <button onclick="hideLeaderboard()" class="primary-btn">BACK</button>
+        </div>
+    </div>
+
+    <script>
+        const CANVAS = document.getElementById('gameCanvas');
+        const CTX = CANVAS.getContext('2d');
+        
+        // Game Constants
+        const GRAVITY = 0.2;  // Reduced from 0.3 for higher jumps
+        const PLAYER_SIZE = 80;  // Increased from 60
+        const PLATFORM_WIDTH = 140;  // Increased from 120
+        const PLATFORM_HEIGHT = 25;  // Increased from 20
+        const JUMP_FORCE = -12;  // Increased from -8 for higher jumps
+        const PLATFORM_SPACING = 120;  // Increased from 100
+        const SCROLL_THRESHOLD = CANVAS.height * 0.6;  // Adjusted for better camera follow
+        const PARTICLE_COUNT = 10;
+
+        // Load Assets
+        const playerImage = new Image();
+        playerImage.src = 'assets/Player.png';
+
+        // Initialize Sound System
+        const ASSETS = {
+            sounds: {}
+        };
+
+        function initSounds() {
+            const soundFiles = ['jump', 'powerup', 'gameOver', 'spring', 'break'];
+            soundFiles.forEach(sound => {
+                const audio = new Audio(`assets/sounds/${sound}.mp3`);
+                audio.volume = 0.3;
+                ASSETS.sounds[sound] = audio;
+            });
+        }
+
+        function playSound(soundName) {
+            if (ASSETS.sounds[soundName]) {
+                ASSETS.sounds[soundName].currentTime = 0;
+                ASSETS.sounds[soundName].play().catch(e => console.log('Sound play failed'));
+            }
+        }
+
+        // Game State
+        const gameState = {
+            current: 'menu',
+            score: 0,
+            highScore: localStorage.getItem('highScore') || 0,
+            playerName: '',
+            powerup: null,
+            powerupTimer: null
+        };
+
+        // Player object
+        const player = {
+            x: CANVAS.width / 2,
+            y: CANVAS.height - 150,
+            width: PLAYER_SIZE,
+            height: PLAYER_SIZE,
+            velocityX: 0,
+            velocityY: 0,
+            speed: 6,  // Reduced from 8
+            hasShield: false
+        };
+
+        let platforms = [];
+        let particles = [];
+        let powerups = [];
+        let screenShake = 0;
+        let backgroundOffset = 0;
+
+        // Input Handling
+        const keys = {
+            left: false,
+            right: false
+        };
+
+        document.addEventListener('keydown', handleKeyDown);
+        document.addEventListener('keyup', handleKeyUp);
+
+        function handleKeyDown(event) {
+            if (event.key === 'ArrowLeft') keys.left = true;
+            if (event.key === 'ArrowRight') keys.right = true;
+        }
+
+        function handleKeyUp(event) {
+            if (event.key === 'ArrowLeft') keys.left = false;
+            if (event.key === 'ArrowRight') keys.right = false;
+        }
+
+        // Game Functions
+        function startGame() {
+            gameState.current = 'playing';
+            gameState.score = 0;
+            gameState.playerName = document.getElementById('playerName').value || 'Anonymous';
+            
+            hideAllMenus();
+            generatePlatforms();
+            resetPlayer();
+            
+            particles = [];
+            powerups = [];
+            screenShake = 0;
+        }
+
+        function generatePlatforms() {
+            platforms = [];
+            
+            // Add the safe starting platform directly under the player
+            platforms.push({
+                x: CANVAS.width / 2 - PLATFORM_WIDTH / 2, // Centered under player
+                y: CANVAS.height - 200, // Just below player's starting position
+                width: PLATFORM_WIDTH,
+                height: PLATFORM_HEIGHT,
+                type: 'normal', // Always make it a normal platform for safety
+                broken: false,
+                direction: 1,
+                originalX: null
+            });
+            
+            // Generate the rest of the platforms
+            let y = CANVAS.height - 300; // Start generating platforms above the safe platform
+            
+            while (y > 0) {
+                platforms.push({
+                    x: Math.random() * (CANVAS.width - PLATFORM_WIDTH),
+                    y: y,
+                    width: PLATFORM_WIDTH,
+                    height: PLATFORM_HEIGHT,
+                    type: getRandomPlatformType(),
+                    broken: false,
+                    direction: Math.random() < 0.5 ? -1 : 1,
+                    originalX: null
+                });
+                y -= PLATFORM_SPACING;
+            }
+        }
+
+        function update() {
+            updatePlayer();
+            updatePlatforms();
+            updateParticles();
+            updatePowerups();
+            updateScore();
+            checkCollisions();
+            updateBackground();
+        }
+
+        function draw() {
+            CTX.clearRect(0, 0, CANVAS.width, CANVAS.height);
+            
+            if (screenShake > 0) {
+                CTX.save();
+                CTX.translate(
+                    Math.random() * screenShake - screenShake/2,
+                    Math.random() * screenShake - screenShake/2
+                );
+            }
+            
+            drawBackground();
+            drawPlatforms();
+            drawPowerups();
+            drawParticles();
+            drawPlayer();
+            drawScore();
+            
+            if (screenShake > 0) CTX.restore();
+        }
+
+        function gameLoop() {
+            if (gameState.current === 'playing') {
+                update();
+                draw();
+            }
+            requestAnimationFrame(gameLoop);
+        }
+
+        function hideAllMenus() {
+            const menus = document.querySelectorAll('.menu');
+            menus.forEach(menu => menu.style.display = 'none');
+        }
+
+        function showMainMenu() {
+            hideAllMenus();
+            document.getElementById('mainMenu').style.display = 'block';
+            gameState.current = 'menu';
+        }
+
+        function showInstructions() {
+            hideAllMenus();
+            document.getElementById('instructions').style.display = 'block';
+        }
+
+        function hideInstructions() {
+            hideAllMenus();
+            showMainMenu();
+        }
+
+        function showLeaderboard() {
+            hideAllMenus();
+            document.getElementById('leaderboard').style.display = 'block';
+            fetchAndDisplayLeaderboard();
+        }
+
+        function hideLeaderboard() {
+            hideAllMenus();
+            showMainMenu();
+        }
+
+        function resetPlayer() {
+            player.x = CANVAS.width / 2 - PLAYER_SIZE / 2;
+            player.y = CANVAS.height - 300;  // Spawn higher above the safe platform
+            player.width = PLAYER_SIZE;
+            player.height = PLAYER_SIZE;
+            player.velocityX = 0;
+            player.velocityY = 0;
+            player.speed = 6;  // Reduced from 8
+            player.hasShield = false;
+        }
+
+        function getRandomPlatformType() {
+            const types = ['normal', 'moving', 'breaking', 'spring'];
+            const weights = [0.7, 0.15, 0.1, 0.05]; // 70% normal, 15% moving, 10% breaking, 5% spring
+            
+            const random = Math.random();
+            let sum = 0;
+            
+            for (let i = 0; i < weights.length; i++) {
+                sum += weights[i];
+                if (random < sum) return types[i];
+            }
+            
+            return 'normal';
+        }
+
+        function updatePlayer() {
+            // Handle horizontal movement
+            if (keys.left) {
+                player.velocityX = -player.speed;
+            } else if (keys.right) {
+                player.velocityX = player.speed;
+            } else {
+                player.velocityX *= 0.8; // Friction
+            }
+
+            // Apply gravity
+            player.velocityY += GRAVITY;
+
+            // Update position
+            player.x += player.velocityX;
+            player.y += player.velocityY;
+
+            // Screen wrapping (left/right)
+            if (player.x + player.width < 0) {
+                player.x = CANVAS.width;
+            } else if (player.x > CANVAS.width) {
+                player.x = -player.width;
+            }
+
+            // Game over if player falls below screen
+            if (player.y > CANVAS.height) {
+                gameOver();
+            }
+
+            // Camera follow (scroll screen up)
+            if (player.y < SCROLL_THRESHOLD) {
+                const diff = SCROLL_THRESHOLD - player.y;
+                player.y = SCROLL_THRESHOLD;
+                
+                // Move everything down
+                platforms.forEach(platform => {
+                    platform.y += diff;
+                });
+                
+                // Update score based on height
+                gameState.score += Math.floor(diff);
+            }
+        }
+
+        function updatePlatforms() {
+            // Remove platforms that have fallen below the screen
+            platforms = platforms.filter(platform => platform.y < CANVAS.height);
+
+            // Generate new platforms if needed
+            while (platforms.length > 0 && platforms[platforms.length - 1].y > 0) {
+                const lastPlatform = platforms[platforms.length - 1];
+                platforms.push({
+                    x: Math.random() * (CANVAS.width - PLATFORM_WIDTH),
+                    y: lastPlatform.y - PLATFORM_SPACING,
+                    width: PLATFORM_WIDTH,
+                    height: PLATFORM_HEIGHT,
+                    type: getRandomPlatformType(),
+                    broken: false,
+                    direction: Math.random() < 0.5 ? -1 : 1,
+                    originalX: null
+                });
+            }
+
+            // Update each platform
+            platforms.forEach(platform => {
+                if (platform.type === 'moving') {
+                    // Initialize originalX if not set
+                    if (platform.originalX === null) {
+                        platform.originalX = platform.x;
+                    }
+                    
+                    platform.x += platform.direction * 2;
+                    
+                    // Reverse direction if platform moves too far
+                    const maxDistance = 100;
+                    if (Math.abs(platform.x - platform.originalX) > maxDistance) {
+                        platform.direction *= -1;
+                    }
+                }
+                
+                if (platform.type === 'breaking' && platform.broken) {
+                    platform.y += 5; // Make broken platforms fall
+                }
+            });
+        }
+
+        function checkCollisions() {
+            // Only check for collisions if player is moving downward
+            if (player.velocityY > 0) {
+                for (let platform of platforms) {
+                    if (platform.broken) continue;
+                    
+                    // Check if player is within platform bounds
+                    if (player.x + player.width > platform.x &&
+                        player.x < platform.x + platform.width &&
+                        player.y + player.height > platform.y &&
+                        player.y + player.height < platform.y + platform.height + player.velocityY) {
+                        
+                        // Handle different platform types
+                        switch (platform.type) {
+                            case 'normal':
+                                player.velocityY = JUMP_FORCE;
+                                playSound('jump');
+                                break;
+                            
+                            case 'breaking':
+                                player.velocityY = JUMP_FORCE;
+                                platform.broken = true;
+                                playSound('break');
+                                break;
+                            
+                            case 'moving':
+                                player.velocityY = JUMP_FORCE;
+                                playSound('jump');
+                                break;
+                            
+                            case 'spring':
+                                player.velocityY = JUMP_FORCE * 1.5; // Higher jump
+                                playSound('spring');
+                                screenShake = 5;
+                                break;
+                        }
+                        
+                        // Create jump effect particles
+                        createJumpParticles(platform.x + platform.width/2, platform.y);
+                    }
+                }
+            }
+        }
+
+        function createJumpParticles(x, y) {
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                particles.push({
+                    x: x,
+                    y: y,
+                    velocityX: (Math.random() - 0.5) * 5,
+                    velocityY: (Math.random() - 2) * 3,
+                    life: 30
+                });
+            }
+        }
+
+        function updateParticles() {
+            particles = particles.filter(particle => particle.life > 0);
+            
+            particles.forEach(particle => {
+                particle.x += particle.velocityX;
+                particle.y += particle.velocityY;
+                particle.velocityY += 0.1; // Gravity effect on particles
+                particle.life--;
+            });
+        }
+
+        function updatePowerups() {
+            // Remove expired powerups
+            powerups = powerups.filter(powerup => !powerup.collected);
+            
+            // Randomly spawn new powerups
+            if (Math.random() < 0.001) { // 0.1% chance each frame
+                powerups.push({
+                    x: Math.random() * (CANVAS.width - 30),
+                    y: player.y - CANVAS.height, // Spawn above player
+                    type: Math.random() < 0.5 ? 'shield' : 'rocket',
+                    collected: false
+                });
+            }
+        }
+
+        function updateScore() {
+            // Score is already updated in updatePlayer()
+            if (screenShake > 0) screenShake--;
+        }
+
+        function updateBackground() {
+            backgroundOffset = (backgroundOffset + 0.5) % CANVAS.height;
+        }
+
+        function drawBackground() {
+            // Create a gradient background
+            const gradient = CTX.createLinearGradient(0, 0, 0, CANVAS.height);
+            gradient.addColorStop(0, '#1a1f2c');
+            gradient.addColorStop(1, '#2d364f');
+            CTX.fillStyle = gradient;
+            CTX.fillRect(0, 0, CANVAS.width, CANVAS.height);
+            
+            // Draw floating particles
+            CTX.fillStyle = 'rgba(255, 255, 255, 0.1)';
+            for (let i = 0; i < 50; i++) {
+                CTX.beginPath();
+                CTX.arc(
+                    (Math.sin((i + backgroundOffset) * 0.1) * CANVAS.width/2) + CANVAS.width/2,
+                    ((i * 30) + backgroundOffset) % CANVAS.height,
+                    2,
+                    0,
+                    Math.PI * 2
+                );
+                CTX.fill();
+            }
+        }
+
+        function drawPlatforms() {
+            platforms.forEach(platform => {
+                // Skip if platform is invalid or broken
+                if (platform.broken || !Number.isFinite(platform.x) || !Number.isFinite(platform.y)) return;
+                
+                CTX.save();
+                
+                // Platform shadow
+                CTX.fillStyle = 'rgba(0, 0, 0, 0.2)';
+                CTX.fillRect(platform.x + 5, platform.y + 5, platform.width, platform.height);
+                
+                // Ensure coordinates are valid before creating gradient
+                const gradientY = Math.max(0, Math.min(platform.y, CANVAS.height));
+                const gradientHeight = Math.max(0, Math.min(platform.height, CANVAS.height - gradientY));
+                
+                // Platform base
+                const gradient = CTX.createLinearGradient(
+                    platform.x,
+                    gradientY,
+                    platform.x,
+                    gradientY + gradientHeight
+                );
+                
+                switch(platform.type) {
+                    case 'normal':
+                        gradient.addColorStop(0, '#8B4513');
+                        gradient.addColorStop(1, '#654321');
+                        CTX.fillStyle = gradient;
+                        CTX.fillRect(platform.x, platform.y, platform.width, platform.height);
+                        // Wood texture
+                        CTX.strokeStyle = '#654321';
+                        CTX.lineWidth = 2;
+                        for(let i = 0; i < 3; i++) {
+                            CTX.beginPath();
+                            CTX.moveTo(platform.x + (platform.width/3) * i, platform.y);
+                            CTX.lineTo(platform.x + (platform.width/3) * i, platform.y + platform.height);
+                            CTX.stroke();
+                        }
+                        break;
+                        
+                    case 'moving':
+                        gradient.addColorStop(0, '#556B2F');
+                        gradient.addColorStop(1, '#3c4d21');
+                        CTX.fillStyle = gradient;
+                        CTX.fillRect(platform.x, platform.y, platform.width, platform.height);
+                        // Moving platform indicators
+                        CTX.strokeStyle = '#FFFFFF';
+                        CTX.lineWidth = 2;
+                        CTX.beginPath();
+                        CTX.moveTo(platform.x + 10, platform.y + platform.height/2);
+                        CTX.lineTo(platform.x + 25, platform.y + platform.height/2);
+                        CTX.stroke();
+                        CTX.beginPath();
+                        CTX.moveTo(platform.x + platform.width - 10, platform.y + platform.height/2);
+                        CTX.lineTo(platform.x + platform.width - 25, platform.y + platform.height/2);
+                        CTX.stroke();
+                        break;
+                        
+                    case 'breaking':
+                        gradient.addColorStop(0, '#CD853F');
+                        gradient.addColorStop(1, '#8B4513');
+                        CTX.fillStyle = gradient;
+                        CTX.fillRect(platform.x, platform.y, platform.width, platform.height);
+                        // Crack pattern
+                        CTX.strokeStyle = '#8B4513';
+                        CTX.lineWidth = 2;
+                        CTX.beginPath();
+                        CTX.moveTo(platform.x + platform.width/2, platform.y);
+                        CTX.lineTo(platform.x + platform.width/3, platform.y + platform.height);
+                        CTX.moveTo(platform.x + platform.width/2, platform.y);
+                        CTX.lineTo(platform.x + platform.width*2/3, platform.y + platform.height);
+                        CTX.stroke();
+                        break;
+                        
+                    case 'spring':
+                        gradient.addColorStop(0, '#DAA520');
+                        gradient.addColorStop(1, '#B8860B');
+                        CTX.fillStyle = gradient;
+                        CTX.fillRect(platform.x, platform.y, platform.width, platform.height);
+                        // Spring coil design
+                        CTX.fillStyle = '#FFD700';
+                        CTX.beginPath();
+                        CTX.moveTo(platform.x + platform.width/2 - 10, platform.y);
+                        CTX.lineTo(platform.x + platform.width/2 + 10, platform.y);
+                        CTX.lineTo(platform.x + platform.width/2 + 5, platform.y - 15);
+                        CTX.lineTo(platform.x + platform.width/2 - 5, platform.y - 15);
+                        CTX.fill();
+                        break;
+                }
+                
+                CTX.restore();
+            });
+        }
+
+        function drawPowerups() {
+            powerups.forEach(powerup => {
+                CTX.save();
+                CTX.fillStyle = powerup.type === 'shield' ? '#4169E1' : '#FF4500';
+                CTX.beginPath();
+                CTX.arc(powerup.x + 15, powerup.y + 15, 15, 0, Math.PI * 2);
+                CTX.fill();
+                
+                // Draw icon
+                CTX.fillStyle = 'white';
+                CTX.font = '20px Arial';
+                CTX.textAlign = 'center';
+                CTX.fillText(
+                    powerup.type === 'shield' ? '🛡️' : '🚀',
+                    powerup.x + 15,
+                    powerup.y + 22
+                );
+                CTX.restore();
+            });
+        }
+
+        function drawParticles() {
+            particles.forEach(particle => {
+                const alpha = particle.life / 30;
+                CTX.fillStyle = `rgba(139, 69, 19, ${alpha})`;
+                CTX.beginPath();
+                CTX.arc(particle.x, particle.y, 3, 0, Math.PI * 2);
+                CTX.fill();
+            });
+        }
+
+        function drawPlayer() {
+            CTX.save();
+            
+            // Draw player shadow
+            CTX.fillStyle = 'rgba(0, 0, 0, 0.2)';
+            CTX.beginPath();
+            CTX.ellipse(
+                player.x + player.width/2,
+                player.y + player.height - 5,
+                player.width/2,
+                20,
+                0,
+                0,
+                Math.PI * 2
+            );
+            CTX.fill();
+            
+            // Draw player
+            if (playerImage.complete) {
+                CTX.drawImage(
+                    playerImage,
+                    player.x,
+                    player.y,
+                    player.width,
+                    player.height
+                );
+            } else {
+                // Fallback if image fails to load
+                CTX.fillStyle = '#8B4513';
+                CTX.fillRect(player.x, player.y, player.width, player.height);
+            }
+            
+            // Draw shield effect if active
+            if (player.hasShield) {
+                CTX.strokeStyle = 'rgba(65, 105, 225, 0.5)';
+                CTX.lineWidth = 3;
+                CTX.beginPath();
+                CTX.arc(
+                    player.x + player.width/2,
+                    player.y + player.height/2,
+                    player.width/1.5,
+                    0,
+                    Math.PI * 2
+                );
+                CTX.stroke();
+            }
+            
+            CTX.restore();
+        }
+
+        function drawScore() {
+            CTX.save();
+            CTX.fillStyle = 'white';
+            CTX.font = 'bold 30px Montserrat';
+            CTX.textAlign = 'center';
+            CTX.fillText(`Score: ${Math.floor(gameState.score)}`, CANVAS.width/2, 50);
+            
+            if (gameState.powerup) {
+                CTX.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                CTX.fillText(
+                    `${gameState.powerup}: ${Math.ceil(gameState.powerupTimer/60)}s`,
+                    CANVAS.width/2,
+                    90
+                );
+            }
+            CTX.restore();
+        }
+
+        function gameOver() {
+            gameState.current = 'menu';
+            if (gameState.score > gameState.highScore) {
+                gameState.highScore = gameState.score;
+                localStorage.setItem('highScore', gameState.highScore);
+            }
+            updateLeaderboard();
+            playSound('gameOver');
+            showMainMenu();
+        }
+
+        // Initialize game
+        window.onload = () => {
+            initSounds();
+            showMainMenu();
+            requestAnimationFrame(gameLoop);
+        };
+
+        // Add error handling for the image
+        playerImage.onerror = (e) => {
+            console.error('Error loading player image:', playerImage.src, e);
+        };
+
+        playerImage.onload = () => {
+            console.log('Successfully loaded player image from:', playerImage.src);
+        };
+    </script>
+
+    <script type="module">
+        // Firebase configuration and initialization
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-app.js";
+        import { getDatabase, ref, push, query, orderByChild, limitToLast, get } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCPDOzkf9OfZMEFnCZpqiMRvRRMYmgHfB8",
+            authDomain: "doodlejumpleaderboard-c9340.firebaseapp.com",
+            projectId: "doodlejumpleaderboard-c9340",
+            storageBucket: "doodlejumpleaderboard-c9340.firebasestorage.app",
+            messagingSenderId: "801384859418",
+            appId: "1:801384859418:web:6c989551343840e7218ea3",
+            measurementId: "G-Y697T9KTLW",
+            databaseURL: "https://doodlejumpleaderboard-c9340-default-rtdb.firebaseio.com"
+        };
+
+        // Initialize Firebase
+        let db;
+        try {
+            const app = initializeApp(firebaseConfig);
+            db = getDatabase(app);
+            console.log("Firebase initialized successfully");
+        } catch (error) {
+            console.error("Firebase initialization error:", error);
+        }
+
+        // Update the leaderboard when game ends
+        window.updateLeaderboard = async function() {
+            if (!db) return;
+            try {
+                const scoresRef = ref(db, 'scores');
+                const scoreData = {
+                    name: gameState.playerName || 'Anonymous',
+                    score: Math.floor(gameState.score),
+                    timestamp: Date.now()
+                };
+                await push(scoresRef, scoreData);
+                console.log("Score uploaded successfully");
+            } catch (error) {
+                console.error("Error updating leaderboard:", error);
+            }
+        };
+
+        // Function to fetch and display leaderboard
+        window.fetchAndDisplayLeaderboard = async function() {
+            if (!db) {
+                console.error("Database not initialized");
+                return;
+            }
+            
+            try {
+                const scoresRef = ref(db, 'scores');
+                const scoresQuery = query(scoresRef, orderByChild('score'), limitToLast(10));
+                const snapshot = await get(scoresQuery);
+                
+                let entries = [];
+                snapshot.forEach((childSnapshot) => {
+                    entries.push(childSnapshot.val());
+                });
+                
+                // Sort entries by score in descending order
+                entries.sort((a, b) => b.score - a.score);
+                
+                // Display entries
+                const leaderboardDiv = document.getElementById('leaderboardEntries');
+                if (!leaderboardDiv) {
+                    console.error("Leaderboard div not found");
+                    return;
+                }
+                
+                if (entries.length === 0) {
+                    leaderboardDiv.innerHTML = '<p style="color: white; text-align: center;">No scores yet. Be the first to play!</p>';
+                    return;
+                }
+                
+                leaderboardDiv.innerHTML = entries.map((entry, index) => `
+                    <div style="
+                        display: flex;
+                        justify-content: space-between;
+                        padding: 10px;
+                        margin: 5px 0;
+                        background: rgba(255,255,255,0.1);
+                        border-radius: 5px;
+                        font-size: 20px;
+                        color: white;
+                    ">
+                        <span>${index + 1}. ${entry.name}</span>
+                        <span>${Math.floor(entry.score)}</span>
+                    </div>
+                `).join('');
+                
+                console.log("Leaderboard displayed successfully");
+                
+            } catch (error) {
+                console.error("Error fetching leaderboard:", error);
+                const leaderboardDiv = document.getElementById('leaderboardEntries');
+                if (leaderboardDiv) {
+                    leaderboardDiv.innerHTML = '<p style="color: white; text-align: center;">Error loading leaderboard</p>';
+                }
+            }
+        };
+
+        // Make sure these functions are in the global scope
+        window.showLeaderboard = function() {
+            hideAllMenus();
+            document.getElementById('leaderboard').style.display = 'block';
+            fetchAndDisplayLeaderboard();
+        };
+
+        window.hideLeaderboard = function() {
+            hideAllMenus();
+            showMainMenu();
+        };
+    </script>
+</body>
+</html> 
+
+
+
+
+
+
